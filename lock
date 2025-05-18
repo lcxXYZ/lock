@@ -1,0 +1,130 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Config
+getgenv().AimlockEnabled = false
+getgenv().AimlockKey = Enum.UserInputType.MouseButton2 -- Hold Right Mouse
+getgenv().AimlockSmoothness = 0.3
+getgenv().FOVRadius = 150
+getgenv().AimlockMasterSwitch = false -- Set to false to fully disable
+
+-- Drawing FOV circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Radius = getgenv().FOVRadius
+fovCircle.Color = Color3.new(0, 1, 0)
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Transparency = 0.7
+
+RunService.RenderStepped:Connect(function()
+    local mousePos = UserInputService:GetMouseLocation()
+    fovCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
+end)
+
+-- Get closest valid player
+local function getClosestTarget()
+    local mousePos = UserInputService:GetMouseLocation()
+    local closestPlayer = nil
+    local closestDist = getgenv().FOVRadius
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            if char and char:FindFirstChild("Head") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                local headPos = char.Head.Position
+                local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    if dist < closestDist then
+                        closestDist = dist
+                        closestPlayer = player
+                    end
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+-- Aiming logic
+local function aimAt(targetPos)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+    local hrp = char.HumanoidRootPart
+    local camPos = Camera.CFrame.Position
+    local direction = (targetPos - camPos)
+    if direction.Magnitude == 0 then return end
+
+    direction = direction.Unit
+    local distance = (Camera.CFrame.p - Camera.Focus.p).Magnitude
+    local desiredCFrame = CFrame.new(camPos, camPos + direction)
+    Camera.CFrame = Camera.CFrame:Lerp(desiredCFrame, getgenv().AimlockSmoothness)
+    Camera.Focus = CFrame.new(camPos + direction * distance)
+end
+
+-- Input: Hold to lock
+local currentTarget = nil
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not getgenv().AimlockMasterSwitch then return end
+    if input.UserInputType == getgenv().AimlockKey then
+        getgenv().AimlockEnabled = true
+        currentTarget = getClosestTarget()
+        print("[Aimlock] Enabled. Target:", currentTarget and currentTarget.Name or "None")
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if not getgenv().AimlockMasterSwitch then return end
+    if input.UserInputType == getgenv().AimlockKey then
+        getgenv().AimlockEnabled = false
+        currentTarget = nil
+        print("[Aimlock] Disabled.")
+    end
+end)
+
+-- Main aimlock logic loop
+RunService.RenderStepped:Connect(function()
+    if not getgenv().AimlockMasterSwitch then return end
+    if getgenv().AimlockEnabled then
+        if currentTarget then
+            local char = currentTarget.Character
+            if char and char:FindFirstChild("Head") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                local headPos = char.Head.Position
+                local mousePos = UserInputService:GetMouseLocation()
+                local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    if dist <= getgenv().FOVRadius then
+                        aimAt(headPos)
+                        return
+                    else
+                        print("[Aimlock] Target moved out of FOV")
+                    end
+                else
+                    print("[Aimlock] Target off screen")
+                end
+            else
+                print("[Aimlock] Target invalid or dead")
+            end
+            currentTarget = getClosestTarget()
+            if currentTarget then
+                print("[Aimlock] Switching target to", currentTarget.Name)
+            else
+                print("[Aimlock] No valid targets")
+            end
+        else
+            currentTarget = getClosestTarget()
+            if currentTarget then
+                print("[Aimlock] Found target", currentTarget.Name)
+            end
+        end
+    end
+end)
