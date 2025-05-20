@@ -14,12 +14,12 @@ getgenv().AimlockMasterSwitch = false -- Set to false to fully disable
 
 -- Drawing FOV circle
 local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = false
+fovCircle.Visible = true
 fovCircle.Radius = getgenv().FOVRadius
-fovCircle.Color = Color3.new(0, 1, 0)
-fovCircle.Thickness = 2
+fovCircle.Color = Color3.new(0, 255, 255)
+fovCircle.Thickness = 1
 fovCircle.Filled = false
-fovCircle.Transparency = 0.7
+fovCircle.Transparency = 0.6
 
 RunService.RenderStepped:Connect(function()
     local mousePos = UserInputService:GetMouseLocation()
